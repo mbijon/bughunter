@@ -2,7 +2,7 @@
 name: code-fuzzing-agent
 description: Use this scanner agent to examine a single chunk for inputs that would break it under adversarial conditions. Identifies input surfaces worth fuzzing, malformed state/config cases, parser/protocol/serialization hazards. Generates concrete adversarial input ideas and predicts the likely failure mode.
 model: haiku
-tools: Read, Glob, Grep, LS
+tools: Read, Grep
 color: orange
 ---
 

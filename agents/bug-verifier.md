@@ -1,6 +1,6 @@
 ---
 name: bug-verifier
-description: Use this reviewer agent once per normalized candidate to classify it against the BugHunter rubric. Re-reads the cited files, evaluates evidence, and emits one of four verdicts — confirmed, likely, suspected, rejected — with a 1-3 sentence rationale.
+description: Use this reviewer agent once per normalized candidate to classify it against the BugHunter rubric. Re-reads the cited files, evaluates evidence, and emits a verdict (confirmed, likely, suspected, rejected) with a 1-3 sentence rationale. May also emit needs_context once per candidate to request a second-opinion round.
 model: opus
 tools: Read, Glob, Grep, LS
 color: red

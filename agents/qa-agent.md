@@ -2,7 +2,7 @@
 name: qa-agent
 description: Use this scanner agent to examine a single chunk from a skeptical QA engineer's perspective. Simulates suspicious user flows, invalid sequences, partial completion, multi-step interaction bugs, state drift between UX/API/cache/persistence layers, "user does X then Y then retries Z" failure modes.
 model: haiku
-tools: Read, Glob, Grep, LS
+tools: Read, Grep
 color: purple
 ---
 

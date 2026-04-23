@@ -195,35 +195,35 @@ Identifies entry points, execution paths, subsystem boundaries, and bug hot zone
 
 Identifies under-tested critical paths. Distinguishes risky untested code from harmless trivial code. Calls out negative/error paths that look untested. Hypothesizes specific bug classes the missing tests would catch.
 
-**Tools:** Read, Glob, Grep, LS
+**Tools:** Read, Grep
 
 ### silent-failure-hunter (scanner, haiku)
 
 Finds swallowed exceptions, broad catches, misleading fallbacks, null/default returns that suppress failure, partial-state mutation followed by failure without rollback, retry/recovery loops that hide real problems, divergence between user-visible behavior and logged behavior.
 
-**Tools:** Read, Glob, Grep, LS
+**Tools:** Read, Grep
 
 ### qa-agent (scanner, haiku)
 
 Thinks like a skeptical QA engineer. Simulates suspicious user flows, invalid sequences, partial completion, multi-step interaction bugs, state drift between UX/API/cache/persistence layers.
 
-**Tools:** Read, Glob, Grep, LS
+**Tools:** Read, Grep
 
 ### code-fuzzing-agent (scanner, haiku)
 
 Identifies input surfaces worth fuzzing, malformed state/config cases, parser/protocol/serialization hazards. Generates concrete adversarial input ideas and the likely failure mode (crash, hang, invalid transition, corruption, logic bypass).
 
-**Tools:** Read, Glob, Grep, LS
+**Tools:** Read, Grep
 
 ### untested-code-tester (scanner, haiku)
 
 Correlates executable logic to testing blind spots. Finds weakly tested cleanup/failure branches, error paths, retries, feature flags, fallback chains, and conditional branches with little coverage. Proposes concrete failures the current suite would not catch.
 
-**Tools:** Read, Glob, Grep, LS
+**Tools:** Read, Grep
 
 ### bug-verifier (reviewer, opus)
 
-Takes the normalized candidate list. For each candidate, re-reads the cited files (with `Read` and `Grep`) and evaluates against the classification rubric. Emits a verdict: `confirmed | likely | suspected | rejected`, with a 1–3 sentence rationale. Signals need for a second opinion via `extra_context_needed` in the response; only the parent re-dispatches.
+Takes the normalized candidate list. For each candidate, re-reads the cited files (with `Read` and `Grep`) and evaluates against the classification rubric. Emits a verdict: `confirmed | likely | suspected | rejected`, with a 1–3 sentence rationale. May also emit `needs_context` to request a second-opinion round — the parent fetches the requested paths/symbols and re-dispatches the verifier once (no deeper recursion). If the second round also returns `needs_context`, the candidate is classified `suspected` and a note is written to `run-log.md`.
 
 **Tools:** Read, Glob, Grep, LS
 
@@ -320,8 +320,8 @@ Two findings A and B collapse into one if **all** of:
 When collapsing, the merged finding:
 
 - Keeps the union of `files` and `line_spans`.
-- Keeps the longest `why_suspicious`.
-- Keeps the most detailed `reproduction_sketch` (longest by char count).
+- Keeps the longest `why_suspicious` (by character count).
+- Keeps the longest `reproduction_sketch` (by character count).
 - Records all source agents in a new `flagged_by` array (replaces singular `agent`).
 - Takes the highest `confidence_hint` among the merged set.
 
@@ -339,6 +339,8 @@ The `bug-verifier` agent classifies each candidate using exactly:
 - **Rejected**: Does not meet the Suspected bar. Does not appear in the report.
 
 Asymmetric on purpose: **false positives are worse than missed speculative bugs.**
+
+The verifier may also emit a control-flow value of `needs_context` (not a classification) to request a second-opinion round; see §4 `bug-verifier` for the protocol. `needs_context` is not a terminal verdict.
 
 ---
 

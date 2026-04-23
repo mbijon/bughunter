@@ -18,7 +18,7 @@ These are your caps. Respect them. The user may override by passing scope or by 
 - `max_chunks` = 200
 - `max_total_agent_invocations` = 600 (warning + pause at this threshold, not a hard stop)
 - `max_files_in_scope` = 2000 (hard refuse without an explicit scope argument)
-- `max_parallel_scanners` = 4
+- `max_parallel_scanners` = 5 (one per lens, so all lenses of a single chunk can run in one batch)
 
 **The 5 lenses** (not including `code-explorer`, which is the planner):
 
@@ -49,7 +49,9 @@ Mark step 1 as `in_progress`, then:
 
 3. **Check for a resumable run**: if `.bughunter/scan-state.json` exists, Read it and offer to resume. If the user wants to resume, jump to whichever step `scan-state.json` indicates is next. Otherwise, start fresh.
 
-4. **Create `.bughunter/` if not present**. Write an empty `scan-state.json` with `{"step": "inventory", "started_at": "<iso>"}`.
+4. **Create `.bughunter/` if not present**. Write an empty `scan-state.json` with `{"step": "inventory", "started_at": "<iso>"}`. Also create `.bughunter/run-log.md` with a header (`# BugHunter run log`, started timestamp, scope) so later steps can append without implicitly creating the file.
+
+5. **Initialize the parent-side file cache.** Maintain an in-memory map `file_contents: {path → string}` for the duration of the run. Every file Read by the parent goes into this map and is reused by downstream steps (scanner dispatches, verifier dispatches) rather than re-Read. A file is only Read again on `/bughunter:triage` or on explicit cache invalidation.
 
 Mark step 1 as `completed`.
 
@@ -68,9 +70,11 @@ Mark step 2 as `in_progress`.
    - `**/*.go`, `**/*.rs`, `**/*.java`, `**/*.kt`, `**/*.swift`
    - `**/*.rb`, `**/*.php`, `**/*.cs`, `**/*.cpp`, `**/*.c`, `**/*.h`, `**/*.hpp`
    - `**/*.sh`, `**/*.bash`
-   - **Do not** include Markdown, JSON config, or lockfiles. **Do not** include test fixtures (`**/fixtures/**`, `**/__fixtures__/**`).
+   - **Do not** include Markdown, JSON config, or lockfiles.
+   - Fixture directories (`**/fixtures/**`, `**/__fixtures__/**`) are excluded **only when the user did not pass an explicit `$ARGUMENTS` scope**. If the user scopes the run *into* a fixture directory (e.g., `/bughunter:hunt examples/fixtures/planted-bugs`), include those files — they are explicitly requested. This lets the plugin's own `examples/fixtures/planted-bugs/` regression test bed be scanned without renaming or relocating it.
 
 3. **File count check**:
+   - If `file_count == 0`: **halt** and tell the user the scope matched no source files. Suggest checking the scope argument or removing over-aggressive excludes.
    - If `file_count > max_files_in_scope` and `$ARGUMENTS` is empty: **halt** and tell the user:
      > "The repo has N source files — above the default 2,000 cap. Re-run with a scope argument, e.g., `/bughunter:hunt src/payments` or `/bughunter:hunt 'src/**/*.ts'`."
    - If over the cap but with a scope given, proceed.
@@ -105,9 +109,10 @@ Mark step 3 as `in_progress`.
    - No chunk exceeds the implicit LOC bound (if code-explorer violated it, split the chunk yourself by splitting `files` evenly).
    - `chunk_id` values are unique strings.
 
-3. If `chunk_count > max_chunks`, halt and tell the user the chunking produced too many chunks and they should tighten the scope.
+3. If `chunk_count == 0`, halt and tell the user the planner returned no chunks (likely an inventory/exclude issue) and to check the scope and retry.
+4. If `chunk_count > max_chunks`, halt and tell the user the chunking produced too many chunks and they should tighten the scope.
 
-4. Write `.bughunter/chunks.json`:
+5. Write `.bughunter/chunks.json`:
    ```json
    {
      "chunk_count": N,
@@ -156,7 +161,7 @@ Mark step 5 as `in_progress`. This is the core of the run.
 
 1. **Read** `.bughunter/coverage-matrix.json`.
 2. **Pick a batch** of up to `max_parallel_scanners` (chunk, lens) pairs that are still `"pending"`. Prefer batching different lenses on the *same chunk* — this means the chunk's file contents, once Read into context, can be passed to multiple children in the same batch (context locality reduces cost and consistency drift).
-3. **Read the chunk files once** (for each distinct chunk in the batch). Assemble their contents.
+3. **Read the chunk files** for each distinct chunk in the batch, using the parent-side `file_contents` cache from step 1.5: Read only files not already cached; hit the cache for any file previously Read (e.g., in an earlier batch). Assemble the per-chunk contents from the cache.
 4. **Invocation count check**: if `invocation_count + batch_size >= max_total_agent_invocations`, halt and tell the user:
    > "BugHunter has used M of N allowed scanner invocations. Continue, stop and produce a partial report, or tighten scope?"
    Wait for the user's answer. If stop: skip to step 6 with whatever candidates are already in `candidates.jsonl`. If continue: proceed and raise the cap by 200.
@@ -170,7 +175,8 @@ Mark step 5 as `in_progress`. This is the core of the run.
      - a reminder of the scanner's output contract (two JSON blocks)
 6. **Collect responses**. For each response:
    - Parse the two JSON blocks (findings array + coverage report).
-   - If the response is unparseable or missing either block, mark that cell as `"skipped"` with `skipped_reason: "scanner_response_malformed"` and continue. Log this to `run-log.md`.
+   - If the response is unparseable or missing either block, **retry once** with an explicit format reminder in the prompt ("Your previous response was not valid. Return exactly two JSON blocks fenced with \`\`\`json. The first is the findings array; the second is the coverage report.") before giving up. If the retry also fails, mark that cell as `"skipped"` with `skipped_reason: "scanner_response_malformed"`, log both attempts to `run-log.md`, and continue.
+   - If the coverage report has `covered: false` but `skipped_reason` is null or missing, set `skipped_reason: "scanner_returned_uncovered_without_reason"` and log the anomaly.
    - For each finding in the findings array: **validate** that `files` and `line_spans` are present. Drop findings missing either, and log the drop to `run-log.md` under a "Vague findings dropped" section.
    - Append valid findings to `.bughunter/candidates.jsonl` (one JSON object per line).
    - Update the coverage matrix cell to `"covered"` or `"skipped"` based on the coverage report.
@@ -197,8 +203,8 @@ Mark step 6 as `in_progress`.
 
    When collapsing, the merged finding:
    - Keeps the union of `files` and `line_spans`.
-   - Keeps the longest `why_suspicious`.
-   - Keeps the most detailed (longest) `reproduction_sketch`.
+   - Keeps the longest `why_suspicious` (by character count).
+   - Keeps the longest `reproduction_sketch` (by character count).
    - Records all source agents in a `flagged_by` array (replaces singular `agent`).
    - Takes the highest `confidence_hint` among the merged set (`high` > `medium` > `low`).
 
@@ -219,21 +225,21 @@ Mark step 6 as `completed`. Update `scan-state.json` to `{"step": "verification"
 
 Mark step 7 as `in_progress`.
 
-For each normalized candidate:
+**Before dispatching**: compute the union of files cited across all candidates. For each file not already in the parent-side `file_contents` cache from step 1.5, Read it once. Each candidate's context slices (line spans + ~20 lines) are then extracted from the cache — no file is Read more than once per run.
 
-1. **Read the cited files** (just the cited line spans plus ~20 lines of context around each, to keep Opus calls tight).
+For each normalized candidate (batches of `max_parallel_scanners` **must** run in parallel — the verifier is stateless per candidate):
+
+1. **Slice the cited file contents** from the cache: each cited line span plus ~20 lines of context before and after.
 2. **Dispatch `bug-verifier`** via the `Agent` tool with:
    - the candidate object
-   - the cited file contents with context
+   - the sliced file contents
    - the `repo_summary`
 3. **Collect the verdict** JSON.
-4. **Second opinion**: if `verdict == "needs_context"` and `extra_context_needed` is populated, parent reads those paths/symbols and re-dispatches `bug-verifier` once with the expanded context. If the second attempt also returns `needs_context`, treat as `suspected` and record a note in `run-log.md`. No further recursion.
+4. **Second opinion**: if `verdict == "needs_context"` and `extra_context_needed` is populated, parent reads those paths/symbols (honoring the cache) and re-dispatches `bug-verifier` once with the expanded context. If the second attempt also returns `needs_context`, treat as `suspected` and record a note in `run-log.md`. No further recursion.
 5. **Append to `.bughunter/verified.jsonl`** — the full verdict object, plus the original candidate object merged as `candidate`:
    ```json
    {"verdict": "...", "rationale": "...", "suggested_next_step": "...", "candidate": { ... }}
    ```
-
-You may parallelize verifier dispatches up to `max_parallel_scanners` to keep the run fast — the verifier is stateless per candidate.
 
 Mark step 7 as `completed`. Update `scan-state.json` to `{"step": "consolidation"}`.
 
