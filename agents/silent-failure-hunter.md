@@ -2,7 +2,7 @@
 name: silent-failure-hunter
 description: Use this scanner agent to examine a single chunk for silent-failure patterns — swallowed exceptions, broad catches, misleading fallbacks, null/default returns that suppress failure, partial-state mutation without rollback, retry loops that hide real problems, divergence between user-visible and logged behavior.
 model: haiku
-tools: Read, Glob, Grep, LS
+tools: Read, Grep
 color: yellow
 ---
 

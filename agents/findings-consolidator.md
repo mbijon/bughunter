@@ -86,7 +86,7 @@ Every entry must include:
 7. **Why Confirmed / Why Likely / Why Suspected** — the verifier's `rationale`, cleanly lifted.
 8. **Suggested next step** — the verifier's `suggested_next_step`.
 
-If any of these are missing from the input finding, do **not** render a placeholder. Either request them from the parent (by emitting a `needs_revision` response described below) or omit the finding entirely and note the omission in a footer.
+If any of these are missing from the input finding, do **not** render a placeholder. Omit the finding entirely and append a note in a `## Omitted findings` footer section at the end of the report listing the `candidate_id`, the fields that were missing, and the verdict that was assigned.
 
 ## Honesty rules
 

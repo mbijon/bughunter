@@ -2,7 +2,7 @@
 name: test-coverage-analyzer
 description: Use this scanner agent to examine a single chunk for under-tested critical paths. Distinguishes risky untested code from harmless trivial code. Calls out negative/error paths that look untested. Hypothesizes specific bug classes the missing tests would catch.
 model: haiku
-tools: Read, Glob, Grep, LS
+tools: Read, Grep
 color: cyan
 ---
 

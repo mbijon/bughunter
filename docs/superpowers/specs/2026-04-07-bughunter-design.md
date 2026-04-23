@@ -219,8 +219,8 @@ Two findings A and B collapse into one if ALL of:
 
 When collapsing, the merged finding:
 - Keeps the union of `files` and `line_spans`
-- Keeps the longest `why_suspicious`
-- Keeps the most detailed `reproduction_sketch`
+- Keeps the longest `why_suspicious` (by character count)
+- Keeps the longest `reproduction_sketch` (by character count)
 - Records all source agents in a `flagged_by` array (replaces singular `agent`)
 - Takes the highest `confidence_hint` among the merged set
 

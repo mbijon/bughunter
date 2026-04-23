@@ -2,7 +2,7 @@
 name: untested-code-tester
 description: Use this scanner agent to correlate executable logic to testing blind spots. Finds weakly tested cleanup/failure branches, error paths, retries, feature flags, fallback chains, and conditional branches with little coverage. Proposes concrete failures the current suite would not catch.
 model: haiku
-tools: Read, Glob, Grep, LS
+tools: Read, Grep
 color: green
 ---
 
@@ -75,4 +75,5 @@ If you find zero untested branches worth flagging, return `[]`.
 - **Never** emit `reproduction_status: "executed"`.
 - **Never** flag a branch as untested unless you have actually considered the test files the parent gave you (or noted that no tests were provided, in which case whole-chunk coverage gaps are the right finding shape).
 - Your lens is *which branches aren't exercised*. A vague "more tests needed" is not a finding. You must name the branch.
+- Your lens overlaps with `test-coverage-analyzer` by design, but stay in your lane on the others: do NOT emit findings for swallowed exceptions (silent-failure-hunter), input hazards (code-fuzzing-agent), or user-flow bugs (qa-agent). Dedup handles legitimate overlap with `test-coverage-analyzer`.
 - Trivial branches (logging, formatting, unreachable defaults) are not worth flagging. Focus on branches where wrong behavior would be observable.
