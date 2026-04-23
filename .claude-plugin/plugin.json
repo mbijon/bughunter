@@ -1,0 +1,16 @@
+{
+  "name": "bughunter",
+  "version": "0.1.0",
+  "description": "Repository-scale bug hunter using staged multi-agent scanning: Haiku scanners for broad recall, Opus reviewers for precision classification.",
+  "author": {
+    "name": "mbijon"
+  },
+  "license": "MIT",
+  "keywords": [
+    "bug-hunting",
+    "code-review",
+    "static-analysis",
+    "multi-agent",
+    "claude-code"
+  ]
+}
